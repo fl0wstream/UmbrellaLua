@@ -9,7 +9,10 @@ local Tinker = {}
 
 -- Menu bools
 Tinker.menuToggle = Menu.AddOptionBool({"Hero Specific", "Tinker"}, "Enabled", false)
-Tinker.checkForSafeCast = Menu.AddOptionBool({"Hero Specific", "Tinker"}, "Check for Safe Cast?", true)
+Tinker.checkForSafeCast = Menu.AddOptionBool({"Hero Specific", "Tinker"}, "Safe Cast Check", true)
+Tinker.drawDamage = Menu.AddOptionBool({"Hero Specific", "Tinker"}, "Draw Damage", true)
+--Tinker.drawDamageSize = Menu.AddOptionSlider({"Hero Specific", "Tinker"}, "Draw Damage Size", 8, 24, 14)
+
 -- > Enemy Selector Settings
 Tinker.enemySelectorMode = Menu.AddOptionCombo({"Hero Specific", "Tinker", "Enemy Selector"}, "Enemy Selector Mode", {"Simple", "Smart"}, 0)
 Tinker.enemyMouseRange = Menu.AddOptionSlider({"Hero Specific", "Tinker", "Enemy Selector"}, "Mouse Range of Searching", 100, 2000, 400)
@@ -178,6 +181,8 @@ function Tinker.OnUpdate()
 end
 
 function Tinker.OnDraw()
+    if not Menu.IsEnabled(Tinker.drawDamage) then return end
+
     if not MyHero then return end
     if NPC.GetUnitName(MyHero) ~= "npc_dota_hero_tinker" then return end
 
