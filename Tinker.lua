@@ -3,7 +3,7 @@
 -- Last update: 26/05/2018
 
 -- Utility.lua by Eroica-cpp
-local Utility = require("scripts/Utility")
+local Utility = require("scripts/Eroica/Utility")
 
 local Tinker = {}
 
