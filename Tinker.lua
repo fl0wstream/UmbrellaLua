@@ -14,8 +14,8 @@ Tinker.drawDamage = Menu.AddOptionBool({"Hero Specific", "Tinker"}, "Draw Damage
 --Tinker.drawDamageSize = Menu.AddOptionSlider({"Hero Specific", "Tinker"}, "Draw Damage Size", 8, 24, 14)
 
 -- > Enemy Selector Settings
-Tinker.enemySelectorMode = Menu.AddOptionCombo({"Hero Specific", "Tinker", "Enemy Selector"}, "Enemy Selector Mode", {"Simple", "Smart"}, 0)
-Tinker.enemyMouseRange = Menu.AddOptionSlider({"Hero Specific", "Tinker", "Enemy Selector"}, "Mouse Range of Searching", 100, 2000, 400)
+--Tinker.enemySelectorMode = Menu.AddOptionCombo({"Hero Specific", "Tinker", "Enemy Selector"}, "Enemy Selector Mode", {"Simple", "Smart"}, 0)
+Tinker.enemyMouseRange = Menu.AddOptionSlider({"Hero Specific", "Tinker", "Enemy Selector"}, "Mouse Range of Searching", 100, 2000, 1000)
 Tinker.selectorAwareBlademail = Menu.AddOptionBool({"Hero Specific", "Tinker", "Enemy Selector"}, "Ignore Enemies with Blade Mail or Lotus", false)
 
 -- Menu keys
@@ -27,7 +27,7 @@ Tinker.menuItems =          {ItemSoulring = "Soul Ring",
                             ItemDagon = "Dagon",
                             ItemEthereal = "Ethereal Blade",
                             ItemVeil = "Veil of Discord",
-                            --ItemBlink = "Blink Dagger",
+                            ItemBlink = "Blink Dagger",
                             ItemOrchid = "Orchid Malevolence",
                             ItemShiva = "Shiva's Guard"}
                             --ItemEuls = "Euls"}
@@ -37,7 +37,7 @@ Tinker.menuItemsHandle =    {ItemSoulring,
                             ItemDagon,
                             ItemEthereal,
                             ItemVeil,
-                            --ItemBlink,
+                            ItemBlink,
                             ItemOrchid,
                             ItemShiva}
                             --ItemEuls}
@@ -166,16 +166,12 @@ function Tinker.OnUpdate()
     Tinker.FetchAbilities()
     Tinker.FetchItems()
 
-    -- why not working?
-    --Log.Write(Ability.GetLevelSpecialValueForFloat(SpellRefresh, "AbilityChannelTime"))
-
-    --Log.Write(1 - NPC.GetMagicalArmorDamageMultiplier(MyHero))
+    -- enemy selecting
+    CurrentVictim = nil
+    Tinker.EnemySelector()
 
     -- Combo part, only while keypressed
     if Menu.IsKeyDown(Tinker.menuComboKey) then
-        -- then search some mofos
-        Tinker.EnemySelector()
-
         if CurrentVictim then Tinker.DoCombo() end
     end
 end
@@ -215,6 +211,13 @@ function Tinker.CalculateDamage(hero)
 
     --                                                  hardcode god lul
     local dmg_multiplier = 1 + Hero.GetIntellectTotal(MyHero) * 0.0008765432
+
+    -- kaya
+    -- spell_amp
+    if NPC.HasItem(MyHero, "item_kaya") then 
+        local kaya = NPC.GetItem(MyHero, "item_kaya")
+        dmg_multiplier = dmg_multiplier + (Ability.GetLevelSpecialValueFor(kaya, "spell_amp") / 100)
+    end
 
     -- Modifiers
     if NPC.HasModifier(MyHero, "modifier_bloodseeker_bloodrage") then
@@ -256,23 +259,20 @@ function Tinker.CalculateDamage(hero)
 
     -- Magic damage
     if Tinker.CanUseItem(ItemDagon, Tinker.menuItemsHandle["ItemDagon"], hero) then
-        local dagon_damage = {400, 500, 600, 700, 800}
-        magic_damage = magic_damage + dagon_damage[Ability.GetLevel(ItemDagon)]
+        magic_damage = magic_damage + Ability.GetLevelSpecialValueFor(ItemDagon, "damage")
     end
 
     if Tinker.CanUseItem(ItemShiva, Tinker.menuItemsHandle["ItemShiva"], hero) then
-        magic_damage = magic_damage + 200
+        magic_damage = magic_damage + Ability.GetLevelSpecialValueFor(ItemShiva, "blast_damage")
     end
 
     if Tinker.CanCastAbility(SpellRockets, Tinker.menuAbilitiesHandle["SpellRockets"], hero) then
-        local damage = {125, 200, 275, 350}
-        magic_damage = magic_damage + damage[Ability.GetLevel(SpellRockets)]
+        magic_damage = magic_damage + Ability.GetLevelSpecialValueFor(SpellRockets, "damage")
     end
 
     -- Pure damage
     if Tinker.CanCastAbility(SpellLaser, Tinker.menuAbilitiesHandle["SpellLaser"], hero) then
-        local damage = {80, 160, 240, 320}
-        pure_damage = pure_damage + damage[Ability.GetLevel(SpellLaser)]
+        pure_damage = pure_damage + Ability.GetLevelSpecialValueFor(SpellLaser, "laser_damage")
     end
 
     return (pure_damage * dmg_multiplier) + (magic_damage * magic_damage_multiplier)
@@ -315,6 +315,9 @@ function Tinker.DoCombo()
 
     -- soul ring, motherfucker
     if Tinker.UseItem(ItemSoulring, Tinker.menuItemsHandle["ItemSoulring"]) then return end
+
+    -- blink to this bitch
+    if Tinker.UseBlink() then return end
 
     -- AM shield :(
     if Tinker.IsAntimageShielded(enemy) then
@@ -412,7 +415,7 @@ end
 
 -- FetchItems() - gets items from our freaky Tinker
 function Tinker.FetchItems()
-    ItemBlink = NPC.GetItem(MyHero, "item_blink_dagger") 
+    ItemBlink = NPC.GetItem(MyHero, "item_blink") 
     ItemDagon = NPC.GetItem(MyHero, "item_dagon")
     if not ItemDagon then
 		for i = 2, 5 do
@@ -497,16 +500,47 @@ function Tinker.CastAbility(ability, abilityHandle)
     return true
 end    
 
+-- UseBlink() - cast blink properly, not in Axe's face, for example
+function Tinker.UseBlink()
+    if Tinker.CanUseItem(ItemBlink, Tinker.menuItemsHandle["ItemBlink"], CurrentVictim) then
+        local cast_range = Ability.GetLevelSpecialValueFor(ItemBlink, "blink_range") + NPC.GetCastRangeBonus(MyHero)
+
+        if NPC.IsEntityInRange(MyHero, CurrentVictim, 650) then return end
+
+        local my_loc = Entity.GetAbsOrigin(MyHero)
+        local distance = Entity.GetAbsOrigin(CurrentVictim) - my_loc
+
+        distance:SetZ(0)
+        distance:Normalize()
+        distance:Scale(cast_range - 1)
+        distance:Scale(0.7)
+
+        local blink_position = my_loc + distance
+
+        Player.PrepareUnitOrders(MyPlayer, 
+                            Enum.UnitOrder.DOTA_UNIT_ORDER_CAST_POSITION,
+                            CurrentVictim,
+                            blink_position,
+                            ItemBlink,
+                            Enum.PlayerOrderIssuer.DOTA_ORDER_ISSUER_HERO_ONLY,
+                            MyHero,
+                            false,
+                            false)
+        return true
+    end
+    return false
+end
+
 -- EnemySelector(), calling it when we need some VICTIMS haha
 function Tinker.EnemySelector()
-    local selector_mode = Menu.GetValue(Tinker.enemySelectorMode)
+    local selector_mode = 0 --Menu.GetValue(Tinker.enemySelectorMode)
     local mouse_range = Menu.GetValue(Tinker.enemyMouseRange)
     local selector_aware_blademail = Menu.IsEnabled(Tinker.selectorAwareBlademail)
 
     local temp_enemy = nil
 
     -- Enemy Selector: Mode 0 - Simple (just choose random hero around mouse lol)
-    if selector_mode == 0 and temp_enemy == nil then
+    if selector_mode == 0 and not temp_enemy then
         temp_enemy = Input.GetNearestHeroToCursor(Entity.GetTeamNum(MyHero), Enum.TeamType.TEAM_ENEMY)
         if Utility.CanCastSpellOn(temp_enemy) and temp_enemy ~= nil and NPC.IsPositionInRange(temp_enemy, Input.GetWorldCursorPos(), mouse_range) then
             if selector_aware_blademail then
